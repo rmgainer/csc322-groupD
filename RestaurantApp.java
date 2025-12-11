@@ -10,6 +10,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.Arrays;
 
 public class RestaurantApp extends JFrame {
     private CardLayout cardLayout;
@@ -26,19 +28,22 @@ public class RestaurantApp extends JFrame {
 
     private Chef loggedInChef;
     private JLabel chefLoginStatusLabel;
+    private Customer loggedInCustomer;
+    private JLabel customerLoginStatusLabel;
 
     private DefaultListModel<String> deliveryStatusModel = new DefaultListModel<>();
 
     private final List<MenuItem> menuItems = new ArrayList<>();
     private final List<Chef> chefs = new ArrayList<>();
     private final List<DeliveryPerson> deliveryPeople = new ArrayList<>();
+    private final List<Customer> customers = new ArrayList<>();
 
     private DefaultListModel<String> chefStatusModel = new DefaultListModel<>();
     private DefaultListModel<String> deliveryListModel = new DefaultListModel<>();
 
     public RestaurantApp() {
         setTitle("Restaurant Management System Demo");
-        setSize(900, 600);
+        setSize(1100, 600);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
 
@@ -53,6 +58,7 @@ public class RestaurantApp extends JFrame {
         JPanel staffPanel = createStaffPanel();
         JPanel chefPanel = createChefPanel();
         JPanel aiPanel = createAIChatPanel();
+        JPanel loginPanel = createLoginPanel(); 
 
         cardPanel.add(homePanel, "HOME");
         cardPanel.add(menuPanel, "MENU");
@@ -60,6 +66,7 @@ public class RestaurantApp extends JFrame {
         cardPanel.add(staffPanel, "STAFF");
         cardPanel.add(chefPanel, "CHEF");
         cardPanel.add(aiPanel, "AI");
+        cardPanel.add(loginPanel, "LOGIN"); 
 
         setLayout(new BorderLayout());
 
@@ -68,21 +75,21 @@ public class RestaurantApp extends JFrame {
         JButton menuButton = new JButton("Menu");
         JButton cartButton = new JButton("Cart");
         JButton staffButton = new JButton("Staff");
-        JButton chefButton = new JButton("Chef Login");
+        JButton loginButton = new JButton("Staff/User Login");
         JButton aiButton = new JButton("AI Helper");
 
         homeButton.addActionListener(e -> cardLayout.show(cardPanel, "HOME"));
         menuButton.addActionListener(e -> cardLayout.show(cardPanel, "MENU"));
         cartButton.addActionListener(e -> cardLayout.show(cardPanel, "CART"));
         staffButton.addActionListener(e -> cardLayout.show(cardPanel, "STAFF"));
-        chefButton.addActionListener(e -> cardLayout.show(cardPanel, "CHEF"));
+        loginButton.addActionListener(e -> cardLayout.show(cardPanel, "LOGIN"));
         aiButton.addActionListener(e -> cardLayout.show(cardPanel, "AI"));
 
         navPanel.add(homeButton);
         navPanel.add(menuButton);
         navPanel.add(cartButton);
         navPanel.add(staffButton);
-        navPanel.add(chefButton);
+        navPanel.add(loginButton);
         navPanel.add(aiButton);
 
         JPanel balancePanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
@@ -118,6 +125,89 @@ public class RestaurantApp extends JFrame {
         deliveryPeople.add(new DeliveryPerson("Del 1"));
         deliveryPeople.add(new DeliveryPerson("Del 2"));
         deliveryPeople.add(new DeliveryPerson("Del 3"));
+        
+        customers.add(new Customer("user1", "password1", "User 1"));
+        customers.add(new Customer("user2", "password2", "User 2"));
+        customers.get(1).setVip(true);
+    }
+
+    private void updateBalanceLabel() {
+        balanceLabel.setText(String.format("Balance: $%.2f", balance));
+    }
+
+    private double calculateCartTotal() {
+        double total = 0.0;
+        for (int i = 0; i < cartModel.size(); i++) {
+            total += cartModel.getElementAt(i).getPrice();
+        }
+        if (loggedInCustomer != null && loggedInCustomer.isVip()) {
+            total *= 0.95;
+        }
+        return total;
+    }
+
+    private void updateCartTotal() {
+        double total = calculateCartTotal();
+        cartTotalLabel.setText(String.format("Total: $%.2f", total));
+    }
+
+    private void updateCustomerStatusLabel() {
+        if (loggedInCustomer != null) {
+            String status = "Logged in as " + loggedInCustomer.getName() + (loggedInCustomer.isVip() ? " (VIP)" : "");
+            customerLoginStatusLabel.setText(status);
+        } else {
+            customerLoginStatusLabel.setText("Not logged in");
+        }
+    }
+
+    private String formatChefStatus(Chef chef) {
+        return String.format("%-10s | Rating: %.1f | Compliments: %d | Complaints: %d | Fired: %b | Last Cmpl: %s",
+                chef.getName(), chef.getAverageRating(), chef.getComplimentCount(), chef.getComplaintCount(),
+                chef.isFired(), chef.getLastComplaint().isEmpty() ? "N/A" : chef.getLastComplaint());
+    }
+
+    private String formatDeliveryStatus(DeliveryPerson d) {
+        return String.format("%-10s | Rating: %.1f | Bid: $%.2f | Fired: %b | Memo: %s",
+                d.getName(), d.getAverageRating(), d.getLastBidPrice(), d.isFired(),
+                d.getLastJustificationMemo().isEmpty() ? "N/A" : d.getLastJustificationMemo());
+    }
+    
+    private void refreshMenuModel() {
+        menuModel.clear();
+        for (MenuItem item : menuItems) {
+            menuModel.addElement(item);
+        }
+    }
+
+    private void updateChefMenuModel(DefaultListModel<MenuItem> chefMenuModel) {
+        chefMenuModel.clear();
+        if (loggedInChef == null) {
+            return;
+        }
+        String chefName = loggedInChef.getName();
+        for (MenuItem item : menuItems) {
+            if (item.getChefName().equals(chefName)) {
+                chefMenuModel.addElement(item);
+            }
+        }
+    }
+
+    private Chef findChefByUsername(String username) {
+        for (Chef chef : chefs) {
+            if (chef.getUsername().equals(username)) {
+                return chef;
+            }
+        }
+        return null;
+    }
+
+    private Customer findCustomerByUsername(String username) {
+        for (Customer customer : customers) {
+            if (customer.getUsername().equals(username)) {
+                return customer;
+            }
+        }
+        return null;
     }
 
     private JPanel createHomePanel() {
@@ -180,35 +270,6 @@ public class RestaurantApp extends JFrame {
         panel.add(bottomPanel, BorderLayout.SOUTH);
 
         return panel;
-    }
-
-    private void refreshMenuModel() {
-        menuModel.clear();
-        for (MenuItem item : menuItems) {
-            menuModel.addElement(item);
-        }
-    }
-
-    private void updateChefMenuModel(DefaultListModel<MenuItem> chefMenuModel) {
-        chefMenuModel.clear();
-        if (loggedInChef == null) {
-            return;
-        }
-        String chefName = loggedInChef.getName();
-        for (MenuItem item : menuItems) {
-            if (item.getChefName().equals(chefName)) {
-                chefMenuModel.addElement(item);
-            }
-        }
-    }
-
-    private Chef findChefByUsername(String username) {
-        for (Chef chef : chefs) {
-            if (chef.getUsername().equals(username)) {
-                return chef;
-            }
-        }
-        return null;
     }
 
     private JPanel createChefPanel() {
@@ -429,127 +490,149 @@ public class RestaurantApp extends JFrame {
        return panel;
     }
 
-private void handleCheckout(ActionEvent e) {
-    if (cartModel.isEmpty()) {
-        JOptionPane.showMessageDialog(this, "Your cart is empty.");
-        return;
+    private JPanel createLoginPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        JPanel loginPanel = new JPanel(new GridLayout(4, 2, 5, 5));
+        loginPanel.setBorder(BorderFactory.createTitledBorder("Customer Login"));
+
+        JTextField usernameField = new JTextField();
+        JPasswordField passwordField = new JPasswordField();
+
+        customerLoginStatusLabel = new JLabel("Not logged in");
+
+        JButton loginButton = new JButton("Login");
+        JButton logoutButton = new JButton("Logout");
+
+        loginButton.addActionListener(e -> {
+            String username = usernameField.getText().trim();
+            String password = new String(passwordField.getPassword()).trim();
+
+            Customer customer = findCustomerByUsername(username);
+            if (customer != null && customer.getPassword().equals(password)) {
+                loggedInCustomer = customer;
+                customerLoginStatusLabel.setText("Logged in as " + customer.getName());
+                updateCartTotal();
+                updateCustomerStatusLabel();
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid credentials.");
+            }
+        });
+
+        logoutButton.addActionListener(e -> {
+            loggedInCustomer = null;
+            customerLoginStatusLabel.setText("Not logged in");
+            updateCartTotal();
+            updateCustomerStatusLabel();
+        });
+
+        loginPanel.add(new JLabel("Username:"));
+        loginPanel.add(usernameField);
+        loginPanel.add(new JLabel("Password:"));
+        loginPanel.add(passwordField);
+        loginPanel.add(loginButton);
+        loginPanel.add(logoutButton);
+        loginPanel.add(customerLoginStatusLabel);
+
+        panel.add(loginPanel, BorderLayout.NORTH);
+        return panel;
     }
 
-    double total = calculateCartTotal();
-    if (total > balance) {
-        JOptionPane.showMessageDialog(this, "Insufficient balance. Please deposit more money.");
-        return;
-    }
-
-    String[] chefOptions = chefs.stream().map(Chef::getName).toArray(String[]::new);
-
-    String selectedChefName = (String) JOptionPane.showInputDialog(
-            this,
-            "Choose a chef:",
-            "Select Chef",
-            JOptionPane.PLAIN_MESSAGE,
-            null,
-            chefOptions,
-            chefOptions[0]
-    );
-
-    if (selectedChefName == null) return;
-
-    Chef selectedChef = chefs.stream()
-            .filter(c -> c.getName().equals(selectedChefName))
-            .findFirst()
-            .orElse(null);
-
-    if (selectedChef == null) {
-        JOptionPane.showMessageDialog(this, "Invalid chef selection.");
-        return;
-    }
-
-    if (selectedChef.isFired()) {
-        JOptionPane.showMessageDialog(this, "Selected chef has been fired. Please choose another.");
-        return;
-    }
-
-    for (DeliveryPerson d : deliveryPeople) {
-        double bid = 5.0 + Math.random() * 10.0;
-        d.setLastBidPrice(bid);
-    }
-
-    DeliveryPerson lowestBidder = null;
-    double lowestBid = Double.MAX_VALUE;
-    for (DeliveryPerson d : deliveryPeople) {
-        if (d.getLastBidPrice() < lowestBid) {
-            lowestBid = d.getLastBidPrice();
-            lowestBidder = d;
-        }
-    }
-
-    String[] delOptions = deliveryPeople.stream().map(DeliveryPerson::getName).toArray(String[]::new);
-    String defaultDeliveryName = lowestBidder != null ? lowestBidder.getName() : delOptions[0];
-
-    StringBuilder bidsInfo = new StringBuilder();
-    for (DeliveryPerson d : deliveryPeople) {
-        bidsInfo.append(d.getName())
-                .append(": $")
-                .append(String.format("%.2f", d.getLastBidPrice()))
-                .append("\n");
-    }
-
-    String selectedDeliveryName = (String) JOptionPane.showInputDialog(
-            this,
-            "Delivery bidding results (system generated):\n" + bidsInfo +
-                    "\nLowest bid: " + (lowestBidder != null
-                    ? lowestBidder.getName() + " ($" + String.format("%.2f", lowestBid) + ")"
-                    : "N/A") +
-                    "\nChoose delivery worker:",
-            "Select Delivery Worker",
-            JOptionPane.PLAIN_MESSAGE,
-            null,
-            delOptions,
-            defaultDeliveryName
-    );
-
-    if (selectedDeliveryName == null) return;
-
-    DeliveryPerson selectedDelivery = deliveryPeople.stream()
-            .filter(d -> d.getName().equals(selectedDeliveryName))
-            .findFirst()
-            .orElse(null);
-
-    if (selectedDelivery == null) {
-        JOptionPane.showMessageDialog(this, "Invalid delivery worker selection.");
-        return;
-    }
-
-    if (selectedDelivery.isFired()) {
-        JOptionPane.showMessageDialog(this, "Selected delivery worker has been fired. Please choose another.");
-        return;
-    }
-
-    if (lowestBidder != null && selectedDelivery != lowestBidder) {
-        String memo = JOptionPane.showInputDialog(this,
-                "You selected a higher-price bid.\nPlease enter justification memo:",
-                "Manager Justification",
-                JOptionPane.PLAIN_MESSAGE);
-        if (memo == null || memo.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Justification memo is required when not choosing the lowest bid.");
+    private void handleCheckout(ActionEvent e) {
+        if (cartModel.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Your cart is empty.");
             return;
         }
-        selectedDelivery.setLastJustificationMemo(memo.trim());
-    } else {
-        selectedDelivery.setLastJustificationMemo("Chose lowest bid.");
+
+        double total = calculateCartTotal();
+        if (total > balance) {
+            JOptionPane.showMessageDialog(this, "Insufficient balance. Please deposit more money.");
+            return;
+        }
+
+        Chef selectedChef = chooseChefForOrder(); 
+        if (selectedChef == null) {
+            return;
+        }
+        
+        for (DeliveryPerson d : deliveryPeople) {
+            double bid = 5.0 + Math.random() * 10.0;
+            d.setLastBidPrice(bid);
+        }
+        DeliveryPerson lowestBidder = null;
+        double lowestBid = Double.MAX_VALUE;
+        for (DeliveryPerson d : deliveryPeople) {
+            if (d.getLastBidPrice() < lowestBid) {
+                lowestBid = d.getLastBidPrice();
+                lowestBidder = d;
+            }
+        }
+
+        StringBuilder bidsInfo = new StringBuilder();
+        for (DeliveryPerson d : deliveryPeople) {
+            bidsInfo.append(d.getName())
+                    .append(": $")
+                    .append(String.format("%.2f", d.getLastBidPrice()))
+                    .append("\n");
+        }
+        String deliveryPrompt = "Delivery bidding results (system generated):\n" + bidsInfo.toString() + "\nLowest bid: " + (lowestBidder != null ? lowestBidder.getName() + " ($" + String.format("%.2f", lowestBid) + ")" : "N/A");
+        
+        boolean hasFreeDelivery = false;
+        if (loggedInCustomer != null && loggedInCustomer.isVip() && loggedInCustomer.getOrderCount() > 0 && loggedInCustomer.getOrderCount() % 3 == 0) {
+            hasFreeDelivery = true;
+            deliveryPrompt += "\nFree delivery available (order count: " + loggedInCustomer.getOrderCount() + ")";
+        }
+        
+        JOptionPane.showMessageDialog(this, deliveryPrompt);
+
+        DeliveryPerson selectedDelivery = chooseDeliveryPersonForOrder();
+        if (selectedDelivery == null) {
+            return;
+        }
+        
+        double deliveryCharge = selectedDelivery.getLastBidPrice();
+        if (hasFreeDelivery) {
+            deliveryCharge = 0.0;
+        }
+        
+        total += deliveryCharge;
+
+        if (total > balance) {
+             JOptionPane.showMessageDialog(this, "Insufficient balance after delivery charges. Please deposit more money.");
+             return;
+        }
+        
+        if (selectedDelivery != lowestBidder) {
+            String memo = JOptionPane.showInputDialog(this, "Justification memo for choosing a non-lowest bidder:");
+            if (memo == null || memo.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(this, "A justification memo is required when not choosing the lowest bid.");
+                return;
+            }
+            selectedDelivery.setLastJustificationMemo(memo.trim());
+        } else {
+            selectedDelivery.setLastJustificationMemo("Chose lowest bid.");
+        }
+
+        balance -= total;
+        updateBalanceLabel();
+
+        if (loggedInCustomer != null) {
+            loggedInCustomer.addTransaction(total);
+            loggedInCustomer.incrementOrderCount();
+            if (loggedInCustomer.getTotalSpent() > 100 && !loggedInCustomer.isVip()) {
+                loggedInCustomer.setVip(true);
+                JOptionPane.showMessageDialog(this, loggedInCustomer.getName() + " is now a VIP");
+            }
+            updateCustomerStatusLabel();
+        }
+
+        JOptionPane.showMessageDialog(this, String.format("Order placed successfully! Total: $%.2f (Delivery: $%.2f)", total, deliveryCharge));
+
+        rateStaff(selectedChef, selectedDelivery); 
+        cartModel.clear();
+        updateCartTotal();
     }
-
-    balance -= total;
-    updateBalanceLabel();
-    JOptionPane.showMessageDialog(this, "Order placed successfully!");
-
-    rateStaff(selectedChef, selectedDelivery);
-
-    cartModel.clear();
-    updateCartTotal();
-}
-
 
     private Chef chooseChefForOrder() {
         List<Chef> availableChefs = new ArrayList<>();
@@ -561,23 +644,19 @@ private void handleCheckout(ActionEvent e) {
         if (availableChefs.isEmpty()) {
             return null;
         }
-
         String[] chefOptions = availableChefs.stream().map(Chef::getName).toArray(String[]::new);
-
         String selectedChefName = (String) JOptionPane.showInputDialog(
-                this,
-                "Choose a chef:",
-                "Select Chef",
-                JOptionPane.PLAIN_MESSAGE,
-                null,
-                chefOptions,
-                chefOptions[0]
+            this,
+            "Choose a chef:",
+            "Select Chef",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            chefOptions,
+            chefOptions[0]
         );
-
         if (selectedChefName == null) {
             return null;
         }
-
         for (Chef chef : availableChefs) {
             if (chef.getName().equals(selectedChefName)) {
                 return chef;
@@ -596,23 +675,19 @@ private void handleCheckout(ActionEvent e) {
         if (availableDelivery.isEmpty()) {
             return null;
         }
-
         String[] options = availableDelivery.stream().map(DeliveryPerson::getName).toArray(String[]::new);
-
         String selectedName = (String) JOptionPane.showInputDialog(
-                this,
-                "Choose a delivery person:",
-                "Select Delivery",
-                JOptionPane.PLAIN_MESSAGE,
-                null,
-                options,
-                options[0]
+            this,
+            "Choose a delivery person:",
+            "Select Delivery",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            options,
+            options[0]
         );
-
         if (selectedName == null) {
             return null;
         }
-
         for (DeliveryPerson d : availableDelivery) {
             if (d.getName().equals(selectedName)) {
                 return d;
@@ -620,7 +695,7 @@ private void handleCheckout(ActionEvent e) {
         }
         return null;
     }
-
+    
     private int askForRating(String message) {
         while (true) {
             String input = JOptionPane.showInputDialog(this, message);
@@ -628,35 +703,28 @@ private void handleCheckout(ActionEvent e) {
                 return -1;
             }
             input = input.trim();
-            if (input.isEmpty()) {
-                return -1;
-            }
             try {
                 int rating = Integer.parseInt(input);
                 if (rating >= 1 && rating <= 5) {
                     return rating;
-                } else {
-                    JOptionPane.showMessageDialog(this, "Please enter a number between 1 and 5.");
                 }
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Please enter a valid integer.");
+            } catch (NumberFormatException e) {
             }
+            JOptionPane.showMessageDialog(this, "Please enter a number between 1 and 5.");
         }
     }
 
     private void applyChefRating(Chef chef, int rating) {
-    chef.addRating(rating);
-
-    int complaints = chef.getComplaintCount();
-    int compliments = chef.getComplimentCount();
-
-    int netComplaints = effectiveComplaints(complaints, compliments);
-    int netCompliments = effectiveCompliments(complaints, compliments);
-
-    double avg = chef.getAverageRating();
-
-    if (!chef.isFired()) {
-        if (avg > 0 && avg < 2.0 || netComplaints >= 3) {
+        chef.addRating(rating);
+        double avg = chef.getAverageRating();
+        int netComplaints = chef.getComplaintCount() - chef.getComplimentCount();
+        
+        if (chef.isSuspended()) {
+            chef.setSuspended(false);
+        }
+        if (avg < 3.0 && avg > 2.0 || netComplaints >= 2) {
+            chef.incrementWarning();
+        } else if (avg <= 2.0 || netComplaints >= 3) {
             if (!chef.isDemoted()) {
                 chef.setDemoted(true);
                 chef.incrementDemotionCount();
@@ -665,68 +733,55 @@ private void handleCheckout(ActionEvent e) {
                 }
             }
         }
-
-        if (avg > 4.0 || netCompliments >= 3) {
-            chef.incrementBonus();
+        if (avg > 4.0 || netComplaints <= -3) {
+            chef.incrementComplimentCount();
         }
+        updateChefStatusModel();
     }
 
-    updateChefStatusModel();
-    }
+    private void applyDeliveryRating(DeliveryPerson delivery, int rating) {
+        delivery.addRating(rating);
+        double avg = delivery.getAverageRating();
+        int netComplaints = delivery.getComplaintCount() - delivery.getComplimentCount();
 
-
-    private void applyDeliveryRating(DeliveryPerson d, int rating) {
-    d.addRating(rating);
-
-    int complaints = d.getComplaintCount();
-    int compliments = d.getComplimentCount();
-
-    int netComplaints = effectiveComplaints(complaints, compliments);
-    int netCompliments = effectiveCompliments(complaints, compliments);
-
-    double avg = d.getAverageRating();
-
-    if (!d.isFired()) {
-        if (avg > 0 && avg < 2.0 || netComplaints >= 3) {
-            if (!d.isDemoted()) {
-                d.setDemoted(true);
-                d.incrementDemotionCount();
-                if (d.getDemotionCount() >= 2) {
-                    d.setFired(true);
+        if (delivery.isSuspended()) {
+            delivery.setSuspended(false);
+        }
+        if (avg < 3.0 && avg > 2.0 || netComplaints >= 2) {
+            delivery.incrementWarning();
+        } else if (avg <= 2.0 || netComplaints >= 3) {
+            if (!delivery.isDemoted()) {
+                delivery.setDemoted(true);
+                delivery.incrementDemotionCount();
+                if (delivery.getDemotionCount() >= 2) {
+                    delivery.setFired(true);
                 }
             }
         }
-
-        if (avg > 4.0 || netCompliments >= 3) {
-            d.incrementBonusCount();
+        if (avg > 4.0 || netComplaints <= -3) {
+            delivery.incrementBonusCount();
         }
+        updateDeliveryStatusModel();
     }
-
-    updateDeliveryStatusModel();
-    }
-
 
     private void rateStaff(Chef chef, DeliveryPerson delivery) {
-    int chefRating = askForRating("Rate the chef (1-5):");
-    int deliveryRating = askForRating("Rate the delivery person (1-5):");
-
-    if (chefRating > 0) {
-        applyChefRating(chef, chefRating);
-    }
-    if (deliveryRating > 0) {
-        applyDeliveryRating(delivery, deliveryRating);
-    }
-
-    collectChefFeedback(chef);
-    collectDeliveryFeedback(delivery);
-
-    updateChefStatusModel();
-    updateDeliveryStatusModel();
+        int chefRating = askForRating("Rate the chef (1-5):");
+        int deliveryRating = askForRating("Rate the delivery person (1-5):");
+        if (chefRating > 0) {
+            applyChefRating(chef, chefRating);
+        }
+        if (deliveryRating > 0) {
+            applyDeliveryRating(delivery, deliveryRating);
+        }
+        collectChefFeedback(chef);
+        collectDeliveryFeedback(delivery);
+        updateChefStatusModel();
+        updateDeliveryStatusModel();
     }
 
     private void collectChefFeedback(Chef chef) {
-    Object[] options = {"None", "Complaint", "Compliment"};
-    int choice = JOptionPane.showOptionDialog(
+        Object[] options = {"None", "Complaint", "Compliment"};
+        int choice = JOptionPane.showOptionDialog(
             this,
             "Do you want to leave a complaint or compliment for the chef?",
             "Chef Feedback",
@@ -735,28 +790,32 @@ private void handleCheckout(ActionEvent e) {
             null,
             options,
             options[0]
-    );
-
-    if (choice == 1) {
-        String text = JOptionPane.showInputDialog(this, "Please enter your complaint:");
-        chef.incrementComplaintCount();
-        chef.setLastComplaint(text != null ? text.trim() : "");
-        if (chef.getComplaintCount() >= 3 && !chef.isDemoted() && !chef.isFired()) {
-            chef.setDemoted(true);
+        );
+        int weight = (loggedInCustomer != null && loggedInCustomer.isVip()) ? 2 : 1;
+        if (choice == 1) {
+            String text = JOptionPane.showInputDialog(this, "Please enter your complaint:");
+            for (int i = 0; i < weight; i++) {
+                chef.incrementComplaintCount();
+                chef.setLastComplaint(text != null ? text.trim() : "");
+                if (chef.getComplaintCount() >= 3 && !chef.isDemoted() && !chef.isFired()) {
+                    chef.setDemoted(true);
+                }
+            }
+        } else if (choice == 2) {
+            String text = JOptionPane.showInputDialog(this, "Please enter your compliment:");
+            for (int i = 0; i < weight; i++) {
+                chef.incrementComplimentCount();
+                chef.setLastCompliment(text != null ? text.trim() : "");
+                if (chef.getComplimentCount() >= 3) {
+                    chef.incrementBonus();
+                }
+            }
         }
-    } else if (choice == 2) {
-        String text = JOptionPane.showInputDialog(this, "Please enter your compliment:");
-        chef.incrementComplimentCount();
-        chef.setLastCompliment(text != null ? text.trim() : "");
-        if (chef.getComplimentCount() >= 3) {
-            chef.incrementBonus();
-        }
-    }
     }
 
     private void collectDeliveryFeedback(DeliveryPerson delivery) {
-    Object[] options = {"None", "Complaint", "Compliment"};
-    int choice = JOptionPane.showOptionDialog(
+        Object[] options = {"None", "Complaint", "Compliment"};
+        int choice = JOptionPane.showOptionDialog(
             this,
             "Do you want to leave a complaint or compliment for the delivery person?",
             "Delivery Feedback",
@@ -765,30 +824,33 @@ private void handleCheckout(ActionEvent e) {
             null,
             options,
             options[0]
-    );
-
-    if (choice == 1) {
-        String text = JOptionPane.showInputDialog(this, "Enter your complaint:");
-        delivery.incrementComplaintCount();
-        delivery.setLastComplaint(text != null ? text.trim() : "");
-        if (delivery.getComplaintCount() >= 3 && !delivery.isDemoted() && !delivery.isFired()) {
-            delivery.setDemoted(true);
-        }
-    } else if (choice == 2) {
-        String text = JOptionPane.showInputDialog(this, "Enter your compliment:");
-        delivery.incrementComplimentCount();
-        delivery.setLastCompliment(text != null ? text.trim() : "");
-        if (delivery.getComplimentCount() >= 3) {
-            delivery.incrementBonusCount();
+        );
+        int weight = (loggedInCustomer != null && loggedInCustomer.isVip()) ? 2 : 1;
+        if (choice == 1) {
+            String text = JOptionPane.showInputDialog(this, "Enter your complaint:");
+            for (int i = 0; i < weight; i++) {
+                delivery.incrementComplaintCount();
+                delivery.setLastComplaint(text != null ? text.trim() : "");
+                if (delivery.getComplaintCount() >= 3 && !delivery.isDemoted() && !delivery.isFired()) {
+                    delivery.setDemoted(true);
+                }
+            }
+        } else if (choice == 2) {
+            String text = JOptionPane.showInputDialog(this, "Enter your compliment:");
+            for (int i = 0; i < weight; i++) {
+                delivery.incrementComplimentCount();
+                delivery.setLastCompliment(text != null ? text.trim() : "");
+                if (delivery.getComplimentCount() >= 3) {
+                    delivery.incrementBonusCount();
+                }
+            }
         }
     }
-    }
-
-
+    
     private void updateChefStatusModel() {
         chefStatusModel.clear();
-        for (Chef c : chefs) {
-            chefStatusModel.addElement(formatChefStatus(c));
+        for (Chef chef : chefs) {
+            chefStatusModel.addElement(formatChefStatus(chef));
         }
     }
 
@@ -799,16 +861,36 @@ private void handleCheckout(ActionEvent e) {
         }
     }
 
+    private void sendAIMessage() {
+        String input = aiInputField.getText().trim();
+        if (input.isEmpty()) return;
+
+        aiConversationArea.append("You: " + input + "\n");
+        aiInputField.setText("");
+
+        new Thread(() -> {
+            try {
+                String prompt = "You are a friendly restaurant assistant. Respond briefly to the following query: " + input;
+                String response = callOllamaAPI(prompt);
+                SwingUtilities.invokeLater(() -> {
+                    aiConversationArea.append("AI: " + response + "\n\n");
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    aiConversationArea.append("AI: Error communicating with AI service.\n\n");
+                });
+            }
+        }).start();
+    }
+
     private void handleVoiceOrder() {
-        String transcript = JOptionPane.showInputDialog(this, "Describe your order using natural language.");
-        if (transcript == null) {
+        String transcript = JOptionPane.showInputDialog(this, "Enter your voice order transcript:");
+        if (transcript == null || transcript.trim().isEmpty()) {
             return;
         }
-        transcript = transcript.trim();
-        if (transcript.isEmpty()) {
-            return;
-        }
-        aiConversationArea.append("Voice order: " + transcript + "\n");
+
+        aiConversationArea.append("Voice Order Transcript: \"" + transcript + "\"\n");
+
         StringBuilder menuNames = new StringBuilder();
         for (int i = 0; i < menuItems.size(); i++) {
             if (i > 0) {
@@ -816,6 +898,7 @@ private void handleCheckout(ActionEvent e) {
             }
             menuNames.append(menuItems.get(i).getName());
         }
+
         StringBuilder promptBuilder = new StringBuilder();
         promptBuilder.append("You are an ordering assistant for a restaurant.\n");
         promptBuilder.append("Menu items: ").append(menuNames).append(".\n");
@@ -823,6 +906,7 @@ private void handleCheckout(ActionEvent e) {
         promptBuilder.append("Extract the order and respond only with lines in the exact format: item name x quantity. ");
         promptBuilder.append("Use only item names from the menu list and assume quantity 1 if not specified.\n");
         String prompt = promptBuilder.toString();
+
         new Thread(() -> {
             try {
                 String response = callOllamaAPI(prompt);
@@ -880,8 +964,8 @@ private void handleCheckout(ActionEvent e) {
                 if (item.getName().equalsIgnoreCase(name)) {
                     for (int i = 0; i < quantity; i++) {
                         cartModel.addElement(item);
+                        addedCount++;
                     }
-                    addedCount += quantity;
                     found = true;
                     break;
                 }
@@ -889,47 +973,27 @@ private void handleCheckout(ActionEvent e) {
         }
         if (addedCount > 0) {
             updateCartTotal();
-            JOptionPane.showMessageDialog(this, "Added " + addedCount + " item(s) to cart from voice order.");
+            JOptionPane.showMessageDialog(this, addedCount + " items added to cart.");
+            cardLayout.show(cardPanel, "CART");
         } else {
-            JOptionPane.showMessageDialog(this, "No items from the menu were detected in the voice order.");
+            JOptionPane.showMessageDialog(this, "No valid items were parsed from the order.");
         }
-    }
-
-    private void sendAIMessage() {
-        String userMessage = aiInputField.getText().trim();
-        if (userMessage.isEmpty()) {
-            return;
-        }
-
-        aiConversationArea.append("You: " + userMessage + "\n");
-        aiInputField.setText("");
-
-        new Thread(() -> {
-            try {
-                String response = callOllamaAPI(userMessage);
-                SwingUtilities.invokeLater(() -> {
-                    aiConversationArea.append("AI: " + response + "\n\n");
-                });
-            } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> {
-                    aiConversationArea.append("AI: Sorry, I couldn't connect to the AI service.\n\n");
-                });
-            }
-        }).start();
     }
 
     private String callOllamaAPI(String prompt) throws Exception {
-        String model = "llama3.2:3b";
         String apiUrl = "http://localhost:11434/api/generate";
+        String model = "llama3";
+
         String escapedPrompt = prompt.replace("\\", "\\\\");
         escapedPrompt = escapedPrompt.replace("\"", "\\\"");
         escapedPrompt = escapedPrompt.replace("\n", "\\n");
         escapedPrompt = escapedPrompt.replace("\r", "\\r");
-        String payload = "{"
-                + "\"model\": \"" + model + "\","
-                + "\"prompt\": \"" + escapedPrompt + "\","
-                + "\"stream\": false"
-                + "}";
+
+        String payload = ("{" +
+                "\"model\": \"" + model + "\"," +
+                "\"prompt\": \"" + escapedPrompt + "\"," +
+                "\"stream\": false" +
+                "}");
 
         URL url = new URL(apiUrl);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -967,81 +1031,14 @@ private void handleCheckout(ActionEvent e) {
         if (endIdx == -1) {
             return "I couldn't parse the AI response.";
         }
+
         String respText = json.substring(idx, endIdx);
         respText = respText.replace("\\n", "\n");
         respText = respText.replace("\\r", "\r");
         respText = respText.replace("\\\"", "\"");
         respText = respText.replace("\\\\", "\\");
+        
         return respText;
-    }
-
-    private double calculateCartTotal() {
-        double total = 0.0;
-        for (int i = 0; i < cartModel.size(); i++) {
-            total += cartModel.getElementAt(i).getPrice();
-        }
-        return total;
-    }
-
-    private void updateCartTotal() {
-        double total = calculateCartTotal();
-        cartTotalLabel.setText(String.format("Total: $%.2f", total));
-    }
-
-    private void updateBalanceLabel() {
-        balanceLabel.setText(String.format("Balance: $%.2f", balance));
-    }
-
-    private String formatChefStatus(Chef c) {
-    String status;
-    if (c.isFired()) {
-        status = "Fired";
-    } else if (c.getDemotionCount() > 0) {
-        status = "Demoted" + c.getDemotionCount();
-    } else {
-        status = "Normal";
-    }
-    return String.format(
-            "%-8s | Complaints:%d | Compliments:%d | Demotions:%d | Status:%-8s | Bonus:%2d",
-            c.getName(),
-            c.getComplaints(),    
-            c.getCompliments(),   
-            c.getDemotionCount(),
-            status,
-            c.getBonusCount()
-    );
-    }
-
-
-    private String formatDeliveryStatus(DeliveryPerson d) {
-    String status;
-    if (d.isFired()) {
-        status = "Fired";
-    } else if (d.getDemotionCount() > 0) {
-        status = "Demoted" + d.getDemotionCount();
-    } else {
-        status = "Normal";
-    }
-    return String.format(
-            "%-8s | Complaints:%d | Compliments:%d | Demotions:%d | Status:%-8s | Bonus:%2d",
-            d.getName(),
-            d.getComplaints(),
-            d.getCompliments(),
-            d.getDemotionCount(),
-            status,
-            d.getBonusCount()
-    );
-    }
-
-
-    private int effectiveComplaints(int complaints, int compliments) {
-    int net = complaints - compliments;
-    return Math.max(0, net);
-    }
-
-    private int effectiveCompliments(int complaints, int compliments) {
-    int net = compliments - complaints;
-    return Math.max(0, net);
     }
 
     public static void main(String[] args) {
@@ -1076,7 +1073,7 @@ class MenuItem {
     }
 
     public String toString() {
-        return String.format("%-20s $%6.2f  (%s)", name, price, chefName);
+        return String.format("%-20s $%6.2f (%s)", name, price, chefName);
     }
 }
 
@@ -1084,20 +1081,16 @@ class Chef {
     private String name;
     private String username;
     private String password;
-
     private int warningCount;
     private boolean suspended;
     private boolean fired;
-
     private int bonusCount;
     private int totalRating;
     private int ratingCount;
-
     private int complaintCount;
     private int complimentCount;
-    private String lastComplaint;
-    private String lastCompliment;
-
+    private String lastComplaint = "";
+    private String lastCompliment = "";
     private boolean demoted;
     private int demotionCount;
 
@@ -1107,7 +1100,7 @@ class Chef {
         this.password = password;
     }
 
-    public void decideMenu(java.util.List<MenuItem> menuItems) {
+    public void decideMenu(List<MenuItem> menuItems) {
         if (name.equals("Chef 1")) {
             menuItems.add(new MenuItem("Burger", 9.99, name));
             menuItems.add(new MenuItem("Fries", 3.99, name));
@@ -1123,137 +1116,98 @@ class Chef {
     public String getName() {
         return name;
     }
-
     public String getUsername() {
         return username;
     }
-
     public String getPassword() {
         return password;
     }
-
     public int getWarningCount() {
         return warningCount;
     }
-
     public void incrementWarning() {
         warningCount++;
     }
-
     public boolean isSuspended() {
         return suspended;
     }
-
     public void setSuspended(boolean suspended) {
         this.suspended = suspended;
     }
-
     public boolean isFired() {
         return fired;
     }
-
     public void setFired(boolean fired) {
         this.fired = fired;
     }
-
-    public int getBonusCount() {
-        return bonusCount;
-    }
-
-    public void incrementBonus() {
-        bonusCount++;
-    }
-
     public void addRating(int rating) {
         totalRating += rating;
         ratingCount++;
     }
-
     public double getAverageRating() {
-        if (ratingCount == 0) {
-            return 0.0;
-        }
+        if (ratingCount == 0) return 0.0;
         return (double) totalRating / ratingCount;
     }
-
     public int getComplaintCount() {
         return complaintCount;
     }
-
     public void incrementComplaintCount() {
         complaintCount++;
     }
-
     public int getComplimentCount() {
         return complimentCount;
     }
-
     public void incrementComplimentCount() {
         complimentCount++;
     }
-
     public String getLastComplaint() {
         return lastComplaint;
     }
-
     public void setLastComplaint(String lastComplaint) {
         this.lastComplaint = lastComplaint;
     }
-
     public String getLastCompliment() {
         return lastCompliment;
     }
-
     public void setLastCompliment(String lastCompliment) {
         this.lastCompliment = lastCompliment;
     }
-
     public boolean isDemoted() {
         return demoted;
     }
-
     public void setDemoted(boolean demoted) {
         this.demoted = demoted;
     }
-
     public int getDemotionCount() {
         return demotionCount;
     }
-
     public void incrementDemotionCount() {
         demotionCount++;
     }
-    public int getComplaints() {
-    return complaintCount;
+    public int getBonusCount() {
+        return bonusCount;
     }
-
-    public int getCompliments() {
-    return complimentCount;
+    public void incrementBonus() {
+        this.bonusCount++;
     }
 }
 
-
 class DeliveryPerson {
     private String name;
-
     private int warningCount;
     private boolean suspended;
     private boolean fired;
-
     private int totalRating;
     private int ratingCount;
-
+    private double lastBidPrice;
+    private String lastJustificationMemo = "";
     private int complaintCount;
     private int complimentCount;
-    private String lastComplaint;
-    private String lastCompliment;
-
+    private String lastComplaint = "";
+    private String lastCompliment = "";
     private boolean demoted;
     private int demotionCount;
     private int bonusCount;
-
-    private double lastBidPrice;
-    private String lastJustificationMemo;
 
     public DeliveryPerson(String name) {
         this.name = name;
@@ -1262,122 +1216,126 @@ class DeliveryPerson {
     public String getName() {
         return name;
     }
-
     public int getWarningCount() {
         return warningCount;
     }
-
     public void incrementWarning() {
         warningCount++;
     }
-
     public boolean isSuspended() {
         return suspended;
     }
-
     public void setSuspended(boolean suspended) {
         this.suspended = suspended;
     }
-
     public boolean isFired() {
         return fired;
     }
-
     public void setFired(boolean fired) {
         this.fired = fired;
     }
-
     public void addRating(int rating) {
         totalRating += rating;
         ratingCount++;
     }
-
     public double getAverageRating() {
-        if (ratingCount == 0) {
-            return 0.0;
-        }
+        if (ratingCount == 0) return 0.0;
         return (double) totalRating / ratingCount;
     }
-
     public int getComplaintCount() {
         return complaintCount;
     }
-
     public void incrementComplaintCount() {
         complaintCount++;
     }
-
     public int getComplimentCount() {
         return complimentCount;
     }
-
     public void incrementComplimentCount() {
         complimentCount++;
     }
-
     public String getLastComplaint() {
         return lastComplaint;
     }
-
     public void setLastComplaint(String lastComplaint) {
         this.lastComplaint = lastComplaint;
     }
-
     public String getLastCompliment() {
         return lastCompliment;
     }
-
     public void setLastCompliment(String lastCompliment) {
         this.lastCompliment = lastCompliment;
     }
-
     public boolean isDemoted() {
         return demoted;
     }
-
     public void setDemoted(boolean demoted) {
         this.demoted = demoted;
     }
-
     public int getDemotionCount() {
         return demotionCount;
     }
-
     public void incrementDemotionCount() {
         demotionCount++;
     }
-
     public int getBonusCount() {
         return bonusCount;
     }
-
     public void incrementBonusCount() {
         bonusCount++;
     }
-
     public double getLastBidPrice() {
         return lastBidPrice;
     }
-
     public void setLastBidPrice(double lastBidPrice) {
         this.lastBidPrice = lastBidPrice;
     }
-
     public String getLastJustificationMemo() {
         return lastJustificationMemo;
     }
-
     public void setLastJustificationMemo(String lastJustificationMemo) {
         this.lastJustificationMemo = lastJustificationMemo;
     }
-
-    public int getComplaints() {
-    return complaintCount;
-    }
-
-    public int getCompliments() {
-    return complimentCount;
-    }
-
 }
 
+class Customer {
+    private String username;
+    private String password;
+    private String name;
+    private double totalSpent = 0.0;
+    private int orderCount = 0;
+    private boolean isVip = false;
+
+    public Customer(String username, String password, String name) {
+        this.username = username;
+        this.password = password;
+        this.name = name;
+    }
+    public String getUsername() {
+        return username;
+    }
+    public String getPassword() {
+        return password;
+    }
+    public String getName() {
+        return name;
+    }
+    public double getTotalSpent() {
+        return totalSpent;
+    }
+    public int getOrderCount() {
+        return orderCount;
+    }
+    public boolean isVip() {
+        return isVip;
+    }
+    public void setVip(boolean isVip) {
+        this.isVip = isVip;
+    }
+    public void addTransaction(double amount) {
+        this.totalSpent += amount;
+    }
+    public void incrementOrderCount() {
+        this.orderCount++;
+    }
+}
