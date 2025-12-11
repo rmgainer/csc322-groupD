@@ -16,6 +16,7 @@ public class RestaurantApp extends JFrame {
     private JPanel cardPanel;
     private JLabel balanceLabel;
     private double balance = 0.00;
+    private boolean isKicked = false;
 
     private DefaultListModel<MenuItem> menuModel = new DefaultListModel<>();
     private DefaultListModel<MenuItem> cartModel = new DefaultListModel<>();
@@ -42,7 +43,7 @@ public class RestaurantApp extends JFrame {
 
     public RestaurantApp() {
         setTitle("Restaurant Management System Demo");
-        setSize(900, 600);
+        setSize(1100, 600);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
 
@@ -107,6 +108,14 @@ public class RestaurantApp extends JFrame {
         balancePanel.add(balanceLabel);
         balancePanel.add(depositButton);
 
+        if (loggedInCustomer != null) {
+        JLabel cust_warningLabel = new JLabel("Warning: " + loggedInCustomer.getWarningCount());
+        balancePanel.add(cust_warningLabel);
+        } else {
+        JLabel cust_warningLabel = new JLabel("Warning: 0");
+        balancePanel.add(cust_warningLabel);
+        }
+        
         JPanel topBar = new JPanel(new BorderLayout());
         topBar.setBorder(new EmptyBorder(5, 10, 5, 10));
         topBar.add(navPanel, BorderLayout.WEST);
@@ -535,7 +544,11 @@ public class RestaurantApp extends JFrame {
         panel.add(bottom, BorderLayout.SOUTH);
         return panel;
     }
-
+    private void updateCustomerWarningLabel() {
+        if (loggedInCustomer != null) {
+            cust_warningLabel.setText("Warning: "+ loggedInCustomer.getWarningCount());
+        }
+    }
     private void handleCheckout(ActionEvent e) {
         if (cartModel.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Your cart is empty.");
@@ -559,6 +572,9 @@ public class RestaurantApp extends JFrame {
         }
 
         if (total > balance) {
+            if (loggedInCustomer != null) {
+                loggedInCustomer.incrementBalanceWarning();  
+                updateCustomerWarningLabel();
             JOptionPane.showMessageDialog(this, "Insufficient balance. Please deposit more money.");
             return;
         }
@@ -677,8 +693,8 @@ public class RestaurantApp extends JFrame {
         if (loggedInCustomer != null) {
             loggedInCustomer.recordOrder(originalTotal);
             if (!loggedInCustomer.isVip()) {
-                if (loggedInCustomer.getComplaintCount() == 0 &&
-                        (loggedInCustomer.getTotalSpent() > 100.0 || loggedInCustomer.getOrderCount() >= 3)) {
+                if (loggedInCustomer.getTotalSpent() > 100.0 ||
+                        (loggedInCustomer.getComplaintCount() == 0 && loggedInCustomer.getOrderCount() >= 3)) {
                     loggedInCustomer.setVip(true);
                     updateCustomerStatusLabel();
                     JOptionPane.showMessageDialog(this, "Congratulations! You are now a VIP customer.");
@@ -795,12 +811,13 @@ public class RestaurantApp extends JFrame {
 
     while (chef.getDemotionCount() < targetDemotions) {
         chef.incrementDemotionCount();
+        chef.setSalary(chef.getSalary() * 0.85);
     }
 
     chef.setDemoted(chef.getDemotionCount() > 0);
 
     if (chef.getDemotionCount() >= 2) {
-        chef.setSuspended(true);
+        chef.setFired(true);
     }
     }
 
@@ -813,12 +830,13 @@ public class RestaurantApp extends JFrame {
 
     while (d.getDemotionCount() < targetDemotions) {
         d.incrementDemotionCount();
+        d.setSalary(d.getSalary() * 0.85);
     }
 
     d.setDemoted(d.getDemotionCount() > 0);
 
     if (d.getDemotionCount() >= 2) {
-        d.setSuspended(true);
+        d.setFired(true);
     }
     }
 
@@ -839,12 +857,14 @@ public class RestaurantApp extends JFrame {
 
     updateChefDemotionStatus(chef);
 
+    
     int bonusesFromHighRatings = chef.getHighRatingCount() / 3;
     int bonusesFromCompliments = chef.getComplimentCount() / 3;
     int targetBonus = bonusesFromHighRatings + bonusesFromCompliments;
 
     while (chef.getBonusCount() < targetBonus) {
         chef.incrementBonus();
+        chef.setSalary(chef.getSalary() * 1.15);
     }
 
     updateChefStatusModel();
@@ -873,6 +893,7 @@ public class RestaurantApp extends JFrame {
 
     while (d.getBonusCount() < targetBonus) {
         d.incrementBonusCount();
+        d.setSalary(d.getSalary() * 1.15);
     }
 
     updateDeliveryStatusModel();
@@ -998,6 +1019,16 @@ public class RestaurantApp extends JFrame {
         }
     }
 
+    private void updatedCustomerStatus()
+    {
+        if (loggedInCustomer.getWarningCount() >= 3){
+            isKicked = true;
+        }
+        else if (logginCustomer.getWarningCount >= 2 && logginCustomer.isVip){
+            logginCustomer.setVip(false);
+            logginCustomer.resetWarning();
+        }
+    }
     private void handleVoiceOrder() {
         String transcript = JOptionPane.showInputDialog(this, "Describe your order using natural language.");
         if (transcript == null) {
@@ -1203,7 +1234,7 @@ public class RestaurantApp extends JFrame {
 
     private String formatChefStatus(Chef c) {
     String status;
-    if (c.isSuspended()) {
+    if (c.isFired()) {
         status = "Fired";
     } else if (c.getDemotionCount() > 0) {
         status = "Demoted" + c.getDemotionCount();
@@ -1211,19 +1242,20 @@ public class RestaurantApp extends JFrame {
         status = "Normal";
     }
     return String.format(
-            "%-8s | Complaints:%d | Compliments:%d | Demotions:%d | Status:%-8s | Bonus:%2d",
+            "%-8s | Complaints:%d | Compliments:%d | Demotions:%d | Status:%-8s | Bonus:%2d | Salary:%.2f ", 
             c.getName(),
             c.getComplaints(),
             c.getCompliments(),
             c.getDemotionCount(),
             status,
-            c.getBonusCount()
+            c.getBonusCount(),
+            c.getSalary()
     );
     }
 
     private String formatDeliveryStatus(DeliveryPerson d) {
     String status;
-    if (d.isSuspended()) {
+    if (d.isFired()) {
         status = "Fired";
     } else if (d.getDemotionCount() > 0) {
         status = "Demoted" + d.getDemotionCount();
@@ -1231,13 +1263,14 @@ public class RestaurantApp extends JFrame {
         status = "Normal";
     }
     return String.format(
-            "%-8s | Complaints:%d | Compliments:%d | Demotions:%d | Status:%-8s | Bonus:%2d",
+            "%-8s | Complaints:%d | Compliments:%d | Demotions:%d | Status:%-8s | Bonus:%2d | Salary:%.2f ",
             d.getName(),
             d.getComplaints(),
             d.getCompliments(),
             d.getDemotionCount(),
             status,
-            d.getBonusCount()
+            d.getBonusCount(),
+            d.getSalary()
     );
     }
 
@@ -1305,9 +1338,9 @@ class Chef {
     private String name;
     private String username;
     private String password;
+    private double salary = 3000.00;
 
     private int warningCount;
-    private boolean suspended;
     private boolean fired;
 
     private int bonusCount;
@@ -1357,20 +1390,20 @@ class Chef {
         return password;
     }
 
+    public double getSalary(){
+        return salary;
+    }
+
+    public void setSalary(double salary){
+        this.salary = salary;
+    }
+
     public int getWarningCount() {
         return warningCount;
     }
 
     public void incrementWarning() {
         warningCount++;
-    }
-
-    public boolean isSuspended() {
-        return suspended;
-    }
-
-    public void setSuspended(boolean suspended) {
-        this.suspended = suspended;
     }
 
     public boolean isFired() {
@@ -1467,9 +1500,9 @@ class Chef {
 
 class DeliveryPerson {
     private String name;
+    private double salary = 1500.00;
 
     private int warningCount;
-    private boolean suspended;
     private boolean fired;
 
     private int totalRating;
@@ -1496,20 +1529,20 @@ class DeliveryPerson {
         return name;
     }
 
+    public double getSalary(){
+        return salary;
+    }
+
+    public void setSalary(double salary){
+        this.salary = salary;
+    }
+
     public int getWarningCount() {
         return warningCount;
     }
 
     public void incrementWarning() {
         warningCount++;
-    }
-
-    public boolean isSuspended() {
-        return suspended;
-    }
-
-    public void setSuspended(boolean suspended) {
-        this.suspended = suspended;
     }
 
     public boolean isFired() {
@@ -1631,6 +1664,7 @@ class Customer {
     private int freeDeliveryCredits;
     private int complaintCount;
     private int complimentCount;
+    public int warningCount;
 
     public Customer(String username, String password) {
         this.username = username;
@@ -1644,6 +1678,18 @@ class Customer {
 
     public String getPassword() {
         return password;
+    }
+
+    public int getWarningCount(){
+        return warningCount;
+    }
+
+    public void incrementWarningCount(){
+        warningCount++;
+    }
+
+    public void resetWarning(){
+        this.warningCount = 0;
     }
 
     public boolean isVip() {
