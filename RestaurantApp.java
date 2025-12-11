@@ -102,9 +102,15 @@ public class RestaurantApp extends JFrame {
         balanceLabel = new JLabel("Balance: $0.00");
         JButton depositButton = new JButton("Deposit $20");
         depositButton.addActionListener(e -> {
+        if (loggedInCustomer != null) {
             balance += 20;
             updateBalanceLabel();
+        } else {
+            JOptionPane.showMessageDialog(this, 
+            "You have to be a registered customer to deposit money.");
+            }
         });
+
         balancePanel.add(balanceLabel);
         balancePanel.add(depositButton);
 
@@ -615,6 +621,10 @@ public class RestaurantApp extends JFrame {
             return;
         }
 
+        if(loggedInCustomer == null){
+            JOptionPane.showMessageDialog(this, "You have to be a registered customer to do following action.");
+            return;
+        }
         double originalTotal = calculateCartTotal();
         double total = originalTotal;
 
