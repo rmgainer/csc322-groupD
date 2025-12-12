@@ -1,3 +1,5 @@
+package restaurant;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -7,19 +9,45 @@ import java.io.OutputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.sql.DriverManager;
+import java.sql.Connection;
+import java.sql.Statement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 
 public class RestaurantApp extends JFrame {
+	private static final String URL = "jdbc:mysql://localhost:3306/restaurant";
+	private static final String USER = "root";
+	private static final String PASSWORD = "A5QG4R=P>8:bjP8%u:sJ";
+		
+	private static Connection connection;
+	
+	public static String safeFormat(String text) {
+		return text.replace("\\", "\\\\").replace("'", "\\'").replace("\"", "\\\"");
+	}
+	
     private static final String MANAGER_USERNAME = "manager";
     private static final String MANAGER_PASSWORD = "password";
 
     private CardLayout cardLayout;
     private JPanel cardPanel;
     private JLabel balanceLabel;
-    private double balance = 0.00;
+    private JButton globalLoginButton;
+    private ActionListener globalLoginAction = e -> {
+    	String options[] = {"Customer", "Manager", "Chef", "Delivery Worker"};
+    	int index = JOptionPane.showOptionDialog(this, "Which type of user are you?", "Select User Type", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+    	switch (index) {
+    		case 0: cardLayout.show(cardPanel, "CUSTOMER"); break;
+    		case 1: cardLayout.show(cardPanel, "MANAGER"); break;
+    		case 2: cardLayout.show(cardPanel, "CHEF"); break;
+    		case 3: cardLayout.show(cardPanel, "DELIVERY"); break;
+    	}
+    };
+    private float balance = 0.00f;
 
     private JTextArea recommendationsArea;
 
@@ -80,6 +108,14 @@ public class RestaurantApp extends JFrame {
     private final List<DeliveryPerson> currentBidDeliveryList = new ArrayList<>();
 
     public RestaurantApp() {
+    	try {
+	    	connection = DriverManager.getConnection(URL, USER, PASSWORD);
+    	} catch (Exception e) {
+    		System.out.println("Could not establish connection with database.");
+    		System.out.println(e);
+    		// System.exit(-1);
+    	}
+    	
         setTitle("Restaurant Management System Demo");
         setSize(1200, 650);
         setLocationRelativeTo(null);
@@ -96,20 +132,20 @@ public class RestaurantApp extends JFrame {
         JPanel cartPanel = createCartPanel();
         JPanel staffPanel = createStaffPanel();
         JPanel chefPanel = createChefPanel();
-        JPanel aiPanel = createAIChatPanel();
         JPanel customerPanel = createCustomerPanel();
         JPanel deliveryPanel = createDeliveryPanel();
         JPanel managerPanel = createManagerPanel();
+        JPanel aiPanel = createAIChatPanel();
 
         cardPanel.add(homePanel, "HOME");
         cardPanel.add(menuPanel, "MENU");
         cardPanel.add(cartPanel, "CART");
         cardPanel.add(staffPanel, "STAFF");
         cardPanel.add(chefPanel, "CHEF");
-        cardPanel.add(aiPanel, "AI");
         cardPanel.add(customerPanel, "CUSTOMER");
         cardPanel.add(deliveryPanel, "DELIVERY");
         cardPanel.add(managerPanel, "MANAGER");
+        cardPanel.add(aiPanel, "AI");
 
         setLayout(new BorderLayout());
 
@@ -118,11 +154,12 @@ public class RestaurantApp extends JFrame {
         JButton menuButton = new JButton("Menu");
         JButton cartButton = new JButton("Cart");
         JButton staffButton = new JButton("Staff");
-        JButton chefButton = new JButton("Chef Login");
+        globalLoginButton = new JButton("Login");
+        // JButton chefButton = new JButton("Chef Login");
+        // JButton customerButton = new JButton("Customer Login");
+        // JButton deliveryButton = new JButton("Delivery Login");
+        // JButton managerButton = new JButton("Manager");
         JButton aiButton = new JButton("AI Helper");
-        JButton customerButton = new JButton("Customer Login");
-        JButton deliveryButton = new JButton("Delivery Login");
-        JButton managerButton = new JButton("Manager");
 
         homeButton.addActionListener(e -> cardLayout.show(cardPanel, "HOME"));
         menuButton.addActionListener(e -> {
@@ -135,21 +172,23 @@ public class RestaurantApp extends JFrame {
             updateDeliveryStatusModel();
             cardLayout.show(cardPanel, "STAFF");
         });
-        chefButton.addActionListener(e -> cardLayout.show(cardPanel, "CHEF"));
+        globalLoginButton.addActionListener(globalLoginAction);
+        // chefButton.addActionListener(e -> cardLayout.show(cardPanel, "CHEF"));
+        // customerButton.addActionListener(e -> cardLayout.show(cardPanel, "CUSTOMER"));
+        // deliveryButton.addActionListener(e -> cardLayout.show(cardPanel, "DELIVERY"));
+        // managerButton.addActionListener(e -> cardLayout.show(cardPanel, "MANAGER"));
         aiButton.addActionListener(e -> cardLayout.show(cardPanel, "AI"));
-        customerButton.addActionListener(e -> cardLayout.show(cardPanel, "CUSTOMER"));
-        deliveryButton.addActionListener(e -> cardLayout.show(cardPanel, "DELIVERY"));
-        managerButton.addActionListener(e -> cardLayout.show(cardPanel, "MANAGER"));
 
         navPanel.add(homeButton);
         navPanel.add(menuButton);
         navPanel.add(cartButton);
         navPanel.add(staffButton);
-        navPanel.add(chefButton);
+        navPanel.add(globalLoginButton);
+        // navPanel.add(chefButton);
+        // navPanel.add(customerButton);
+        // navPanel.add(deliveryButton);
+        // navPanel.add(managerButton);
         navPanel.add(aiButton);
-        navPanel.add(customerButton);
-        navPanel.add(deliveryButton);
-        navPanel.add(managerButton);
 
         JPanel balancePanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         balanceLabel = new JLabel("Balance: $0.00");
@@ -183,17 +222,91 @@ public class RestaurantApp extends JFrame {
     }
 
     private void initializeData() {
-        chefs.add(new Chef("Chef 1", "chef1", "password1"));
-        chefs.add(new Chef("Chef 2", "chef2", "password2"));
-        chefs.add(new Chef("Chef 3", "chef3", "password3"));
+    	try {
+    		Statement statement = connection.createStatement();
+    		ResultSet result = statement.executeQuery("SELECT * FROM MenuItems;");
+    		while (result.next()) {
+    			menuItems.add(new MenuItem(connection, result));
+    		}
+    	} catch (Exception e) {
+    		System.out.println(e);
+            chefs.add(new Chef("Chef 1", "chef1", "password1"));
+            chefs.add(new Chef("Chef 2", "chef2", "password2"));
+            chefs.add(new Chef("Chef 3", "chef3", "password3"));
+    	}
+    	
+    	try {
+    		Statement statement = connection.createStatement();
+    		ResultSet result = statement.executeQuery("SELECT * FROM Customers;");
+    		while (result.next()) {
+    			customers.add(new Customer(connection, result));
+    		}
+    	} catch (Exception e) {
+    		System.out.println(e);
+            deliveryPeople.add(new DeliveryPerson("Del 1"));
+            deliveryPeople.add(new DeliveryPerson("Del 2"));
+            deliveryPeople.add(new DeliveryPerson("Del 3"));
+    	}
+    	
+    	try {
+    		Statement statement = connection.createStatement();
+    		ResultSet result = statement.executeQuery("SELECT * FROM Chefs;");
+    		while (result.next()) {
+    			chefs.add(new Chef(connection, result));
+    		}
+    	} catch (Exception e) {
+    		System.out.println(e);
+    	}
+
+    	try {
+    		Statement statement = connection.createStatement();
+    		ResultSet result = statement.executeQuery("SELECT * FROM Deliverers;");
+    		while (result.next()) {
+    			deliveryPeople.add(new DeliveryPerson(connection, result));
+    		}
+    	} catch (Exception e) {
+    		System.out.println(e);
+    	}
+    	
+    	try {
+    		Statement statement = connection.createStatement();
+    		ResultSet result = statement.executeQuery("SELECT * FROM PendingCustomers;");
+    		while (result.next()) {
+    			Customer c = new Customer(result.getString(1), result.getString(2));
+    			pendingCustomers.add(c);
+    			pendingCustomerModel.addElement(c);
+    		}
+    	} catch (Exception e) {
+    		System.out.println(e);
+    	}
+    	
+    	try {
+    		Statement statement = connection.createStatement();
+    		ResultSet result = statement.executeQuery("SELECT * FROM PendingChefs;");
+    		while (result.next()) {
+    			Chef c = new Chef(result.getString(1), result.getString(1), result.getString(2));
+    			pendingChefs.add(c);
+    			pendingChefModel.addElement(c);
+    		}
+    	} catch (Exception e) {
+    		System.out.println(e);
+    	}
+    	
+    	try {
+    		Statement statement = connection.createStatement();
+    		ResultSet result = statement.executeQuery("SELECT * FROM PendingDeliverers;");
+    		while (result.next()) {
+    			DeliveryPerson d = new DeliveryPerson(result.getString(1), result.getString(1), result.getString(2));
+    			pendingDeliveries.add(d);
+    			pendingDeliveryModel.addElement(d);
+    		}
+    	} catch (Exception e) {
+    		System.out.println(e);
+    	}
 
         for (Chef chef : chefs) {
             chef.decideMenu(menuItems);
         }
-
-        deliveryPeople.add(new DeliveryPerson("Del 1", "del1", "password1"));
-        deliveryPeople.add(new DeliveryPerson("Del 2", "del2", "password2"));
-        deliveryPeople.add(new DeliveryPerson("Del 3", "del3", "password3"));
     }
 
     private void initializeKnowledgeBase() {
@@ -362,6 +475,9 @@ public class RestaurantApp extends JFrame {
             if (chef != null && chef.getPassword().equals(password)) {
                 loggedInChef = chef;
                 chefLoginStatusLabel.setText("Logged in as " + chef.getName());
+                globalLoginButton.setText("Account (Chef)");
+                globalLoginButton.removeActionListener(globalLoginButton.getActionListeners()[0]);
+                globalLoginButton.addActionListener(ev -> cardLayout.show(cardPanel, "CHEF"));
             } else {
                 JOptionPane.showMessageDialog(this, "Invalid credentials.");
             }
@@ -385,12 +501,24 @@ public class RestaurantApp extends JFrame {
                 }
             }
             Chef newChef = new Chef(username, username, password);
-            pendingChefs.add(newChef);
-            pendingChefModel.addElement(newChef);
-            JOptionPane.showMessageDialog(this, "Registration submitted. Waiting for manager approval.");
+            try {
+            	Statement statement = connection.createStatement();
+            	statement.executeUpdate("INSERT INTO PendingChefs (fullname, username, password) VALUES ('"+safeFormat(username)+"', '"+safeFormat(username)+"', '"+safeFormat(password)+"')");
+                pendingChefs.add(newChef);
+                pendingChefModel.addElement(newChef);
+                JOptionPane.showMessageDialog(this, "Registration submitted. Waiting for manager approval.");
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
         });
 
         logoutButton.addActionListener(e -> {
+        	if (loggedInChef != null) {
+                globalLoginButton.setText("Login");
+                globalLoginButton.removeActionListener(globalLoginButton.getActionListeners()[0]);
+                globalLoginButton.addActionListener(globalLoginAction);
+                cardLayout.show(cardPanel, "HOME");
+        	}
             loggedInChef = null;
             chefLoginStatusLabel.setText("Not logged in");
         });
@@ -433,7 +561,7 @@ public class RestaurantApp extends JFrame {
                 return;
             }
             try {
-                double price = Double.parseDouble(priceStr.trim());
+                float price = Float.parseFloat(priceStr.trim());
                 int vipChoice = JOptionPane.showConfirmDialog(this, "VIP only dish?", "Dish Type", JOptionPane.YES_NO_OPTION);
                 boolean vipOnly = (vipChoice == JOptionPane.YES_OPTION);
                 MenuItem newItem = new MenuItem(name.trim(), price, loggedInChef.getName(), vipOnly);
@@ -509,6 +637,9 @@ public class RestaurantApp extends JFrame {
                     return;
                 }
                 loggedInCustomer = c;
+                globalLoginButton.setText("Account (Customer)");
+                globalLoginButton.removeActionListener(globalLoginButton.getActionListeners()[0]);
+                globalLoginButton.addActionListener(ev -> cardLayout.show(cardPanel, "CUSTOMER"));
                 updateCustomerStatusLabel();
                 updateCustomerWarningLabel();
                 refreshMenuModel();
@@ -537,9 +668,15 @@ public class RestaurantApp extends JFrame {
                 }
             }
             Customer c = new Customer(username, password);
-            pendingCustomers.add(c);
-            pendingCustomerModel.addElement(c);
-            JOptionPane.showMessageDialog(this, "Registration submitted. Waiting for manager approval.");
+            try {
+            	Statement statement = connection.createStatement();
+            	statement.executeUpdate("INSERT INTO PendingCustomers (username, password) VALUES ('"+safeFormat(username)+"', '"+safeFormat(password)+"')");
+                pendingCustomers.add(c);
+                pendingCustomerModel.addElement(c);
+                JOptionPane.showMessageDialog(this, "Registration submitted. Waiting for manager approval.");
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
         });
 
         loginPanel.add(new JLabel("Username:"));
@@ -556,6 +693,12 @@ public class RestaurantApp extends JFrame {
         statusPanel.add(customerWarningLabel);
         JButton logoutButton = new JButton("Logout");
         logoutButton.addActionListener(e -> {
+        	if (loggedInCustomer != null) {
+                globalLoginButton.setText("Login");
+                globalLoginButton.removeActionListener(globalLoginButton.getActionListeners()[0]);
+                globalLoginButton.addActionListener(globalLoginAction);
+                cardLayout.show(cardPanel, "HOME");
+        	}
             loggedInCustomer = null;
             updateCustomerStatusLabel();
             updateCustomerWarningLabel();
@@ -742,6 +885,9 @@ public class RestaurantApp extends JFrame {
                     return;
                 }
                 loggedInDelivery = d;
+                globalLoginButton.setText("Account (Delivery Worker)");
+                globalLoginButton.removeActionListener(globalLoginButton.getActionListeners()[0]);
+                globalLoginButton.addActionListener(ev -> cardLayout.show(cardPanel, "DELIVERY"));
                 deliveryLoginStatusLabel.setText("Logged in as " + d.getName());
             } else {
                 JOptionPane.showMessageDialog(this, "Invalid credentials.");
@@ -766,12 +912,25 @@ public class RestaurantApp extends JFrame {
                 }
             }
             DeliveryPerson newDel = new DeliveryPerson(username, username, password);
-            pendingDeliveries.add(newDel);
-            pendingDeliveryModel.addElement(newDel);
+            try {
+            	Statement statement = connection.createStatement();
+            	statement.executeUpdate("INSERT INTO PendingDeliverers (fullname, username, password) VALUES ('"+safeFormat(username)+"', '"+safeFormat(username)+"', '"+safeFormat(password)+"')");
+                pendingDeliveries.add(newDel);
+                pendingDeliveryModel.addElement(newDel);
+                JOptionPane.showMessageDialog(this, "Registration submitted. Waiting for manager approval.");
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
             JOptionPane.showMessageDialog(this, "Registration submitted. Waiting for manager approval.");
         });
 
         logoutButton.addActionListener(e -> {
+        	if (loggedInDelivery != null) {
+                globalLoginButton.setText("Login");
+                globalLoginButton.removeActionListener(globalLoginButton.getActionListeners()[0]);
+                globalLoginButton.addActionListener(globalLoginAction);
+                cardLayout.show(cardPanel, "HOME");
+        	}
             loggedInDelivery = null;
             deliveryLoginStatusLabel.setText("Not logged in");
             feedbackCustomer = null;
@@ -820,7 +979,7 @@ public class RestaurantApp extends JFrame {
                 return;
             }
             try {
-                double price = Double.parseDouble(input.trim());
+                float price = Float.parseFloat(input.trim());
                 if (price <= 0) {
                     JOptionPane.showMessageDialog(this, "Bid price must be positive.");
                     return;
@@ -971,6 +1130,9 @@ public class RestaurantApp extends JFrame {
             String password = new String(passwordField.getPassword()).trim();
             if (MANAGER_USERNAME.equals(username) && MANAGER_PASSWORD.equals(password)) {
                 managerLoggedIn = true;
+                globalLoginButton.setText("Account (Manager)");
+                globalLoginButton.removeActionListener(globalLoginButton.getActionListeners()[0]);
+                globalLoginButton.addActionListener(ev -> cardLayout.show(cardPanel, "MANAGER"));
                 managerStatusLabel.setText("Logged in as Manager");
             } else {
                 JOptionPane.showMessageDialog(this, "Invalid manager credentials.");
@@ -978,6 +1140,12 @@ public class RestaurantApp extends JFrame {
         });
 
         logoutButton.addActionListener(e -> {
+        	if (managerLoggedIn) {
+                globalLoginButton.setText("Login");
+                globalLoginButton.removeActionListener(globalLoginButton.getActionListeners()[0]);
+                globalLoginButton.addActionListener(globalLoginAction);
+                cardLayout.show(cardPanel, "HOME");
+        	}
             managerLoggedIn = false;
             managerStatusLabel.setText("Not logged in");
         });
@@ -986,11 +1154,9 @@ public class RestaurantApp extends JFrame {
         loginPanel.add(usernameField);
         loginPanel.add(new JLabel("Password:"));
         loginPanel.add(passwordField);
-        loginPanel.add(loginButton);
-        loginPanel.add(new JLabel(""));
         loginPanel.add(new JLabel("Status:"));
         loginPanel.add(managerStatusLabel);
-        loginPanel.add(new JLabel(""));
+        loginPanel.add(loginButton);
         loginPanel.add(logoutButton);
 
         panel.add(loginPanel, BorderLayout.NORTH);
@@ -1011,11 +1177,19 @@ public class RestaurantApp extends JFrame {
             }
             Chef c = pendingChefList.getSelectedValue();
             if (c == null) return;
-            pendingChefs.remove(c);
-            pendingChefModel.removeElement(c);
-            chefs.add(c);
-            updateChefStatusModel();
-            JOptionPane.showMessageDialog(this, "Chef approved: " + c.getName());
+            try {
+            	Statement pStatement = connection.createStatement();
+            	pStatement.executeUpdate("DELETE FROM PendingChefs WHERE username = '"+safeFormat(c.getUsername())+"';");
+            	Statement cStatement = connection.createStatement();
+            	cStatement.executeUpdate("INSERT INTO Chefs (fullname, username, password) VALUES ('"+safeFormat(c.getUsername())+"', '"+safeFormat(c.getUsername())+"', '"+safeFormat(c.getPassword())+"');");
+                pendingChefs.remove(c);
+                pendingChefModel.removeElement(c);
+                chefs.add(c);
+                updateChefStatusModel();
+                JOptionPane.showMessageDialog(this, "Chef approved: " + c.getName());
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
         });
         rejectChef.addActionListener(e -> {
             if (!managerLoggedIn) {
@@ -1024,9 +1198,15 @@ public class RestaurantApp extends JFrame {
             }
             Chef c = pendingChefList.getSelectedValue();
             if (c == null) return;
-            pendingChefs.remove(c);
-            pendingChefModel.removeElement(c);
-            JOptionPane.showMessageDialog(this, "Chef registration rejected.");
+            try {
+            	Statement pStatement = connection.createStatement();
+            	pStatement.executeUpdate("DELETE FROM PendingChefs WHERE username = '"+safeFormat(c.getUsername())+"';");
+                pendingChefs.remove(c);
+                pendingChefModel.removeElement(c);
+                JOptionPane.showMessageDialog(this, "Chef registration rejected.");
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
         });
         JPanel chefBtnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         chefBtnPanel.add(approveChef);
@@ -1048,11 +1228,19 @@ public class RestaurantApp extends JFrame {
             }
             DeliveryPerson d = pendingDelList.getSelectedValue();
             if (d == null) return;
-            pendingDeliveries.remove(d);
-            pendingDeliveryModel.removeElement(d);
-            deliveryPeople.add(d);
-            updateDeliveryStatusModel();
-            JOptionPane.showMessageDialog(this, "Delivery worker approved: " + d.getName());
+            try {
+            	Statement pStatement = connection.createStatement();
+            	pStatement.executeUpdate("DELETE FROM PendingChefs WHERE username = '"+safeFormat(d.getUsername())+"';");
+            	Statement cStatement = connection.createStatement();
+            	cStatement.executeUpdate("INSERT INTO Chefs (fullname, username, password) VALUES ('"+safeFormat(d.getUsername())+"', '"+safeFormat(d.getUsername())+"', '"+safeFormat(d.getPassword())+"');");
+                pendingDeliveries.remove(d);
+                pendingDeliveryModel.removeElement(d);
+                deliveryPeople.add(d);
+                updateDeliveryStatusModel();
+                JOptionPane.showMessageDialog(this, "Delivery worker approved: " + d.getName());
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
         });
         rejectDel.addActionListener(e -> {
             if (!managerLoggedIn) {
@@ -1061,9 +1249,15 @@ public class RestaurantApp extends JFrame {
             }
             DeliveryPerson d = pendingDelList.getSelectedValue();
             if (d == null) return;
-            pendingDeliveries.remove(d);
-            pendingDeliveryModel.removeElement(d);
-            JOptionPane.showMessageDialog(this, "Delivery registration rejected.");
+            try {
+            	Statement pStatement = connection.createStatement();
+            	pStatement.executeUpdate("DELETE FROM PendingChefs WHERE username = '"+safeFormat(d.getUsername())+"';");
+                pendingDeliveries.remove(d);
+                pendingDeliveryModel.removeElement(d);
+                JOptionPane.showMessageDialog(this, "Delivery registration rejected.");
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
         });
         JPanel delBtnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         delBtnPanel.add(approveDel);
@@ -1072,7 +1266,7 @@ public class RestaurantApp extends JFrame {
         delPanel.add(delBtnPanel, BorderLayout.SOUTH);
 
         JPanel complaintPanel = new JPanel(new BorderLayout());
-        complaintPanel.setBorder(BorderFactory.createTitledBorder("Pending Customer Complaints (from delivery)"));
+        complaintPanel.setBorder(BorderFactory.createTitledBorder("Pending Customer Complaints"));
         JList<CustomerFeedback> pendingFeedbackList = new JList<>(pendingCustomerFeedbackModel);
         pendingFeedbackList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         JScrollPane cfScroll = new JScrollPane(pendingFeedbackList);
@@ -1134,10 +1328,18 @@ public class RestaurantApp extends JFrame {
             }
             Customer c = pendingCustomerList.getSelectedValue();
             if (c == null) return;
-            pendingCustomers.remove(c);
-            pendingCustomerModel.removeElement(c);
-            customers.add(c);
-            JOptionPane.showMessageDialog(this, "Customer approved: " + c.getUsername());
+            try {
+            	Statement pStatement = connection.createStatement();
+            	pStatement.executeUpdate("DELETE FROM PendingCustomers WHERE username = '"+safeFormat(c.getUsername())+"';");
+            	Statement cStatement = connection.createStatement();
+            	cStatement.executeUpdate("INSERT INTO Customers (username, password) VALUES ('"+safeFormat(c.getUsername())+"', '"+safeFormat(c.getPassword())+"')");
+                pendingCustomers.remove(c);
+                pendingCustomerModel.removeElement(c);
+                customers.add(c);
+                JOptionPane.showMessageDialog(this, "Customer approved: " + c.getUsername());
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
         });
         rejectCust.addActionListener(e -> {
             if (!managerLoggedIn) {
@@ -1146,9 +1348,15 @@ public class RestaurantApp extends JFrame {
             }
             Customer c = pendingCustomerList.getSelectedValue();
             if (c == null) return;
-            pendingCustomers.remove(c);
-            pendingCustomerModel.removeElement(c);
-            JOptionPane.showMessageDialog(this, "Customer registration rejected.");
+            try {
+            	Statement pStatement = connection.createStatement();
+            	pStatement.executeUpdate("DELETE FROM PendingCustomers WHERE username = '"+safeFormat(c.getUsername())+"';");
+                pendingCustomers.remove(c);
+                pendingCustomerModel.removeElement(c);
+                JOptionPane.showMessageDialog(this, "Customer registration rejected.");
+            } catch (Exception ex) {
+            	System.out.println(ex);
+            }
         });
         JPanel custBtnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         custBtnPanel.add(approveCust);
@@ -1182,10 +1390,10 @@ public class RestaurantApp extends JFrame {
             bidListModel.clear();
             currentBidDeliveryList.clear();
             if (selected != null) {
-                Map<DeliveryPerson, Double> bids = selected.getBids();
-                for (Map.Entry<DeliveryPerson, Double> entry : bids.entrySet()) {
+                Map<DeliveryPerson, Float> bids = selected.getBids();
+                for (Map.Entry<DeliveryPerson, Float> entry : bids.entrySet()) {
                     DeliveryPerson d = entry.getKey();
-                    Double price = entry.getValue();
+                    Float price = entry.getValue();
                     currentBidDeliveryList.add(d);
                     bidListModel.addElement(d.getName() + " - $" + String.format("%.2f", price));
                 }
@@ -1280,14 +1488,14 @@ public class RestaurantApp extends JFrame {
             return;
         }
 
-        double originalTotal = calculateCartTotal();
-        double total = originalTotal;
+        float originalTotal = calculateCartTotal();
+        float total = originalTotal;
 
         boolean vipNow = loggedInCustomer != null && loggedInCustomer.isVip();
         boolean usedFreeDelivery = false;
 
         if (vipNow) {
-            double discount = total * 0.05;
+            float discount = total * 0.05f;
             total -= discount;
         }
 
@@ -1423,7 +1631,7 @@ public class RestaurantApp extends JFrame {
 
         while (chef.getDemotionCount() < targetDemotions) {
             chef.incrementDemotionCount();
-            chef.setSalary(chef.getSalary() * 0.85);
+            chef.setSalary(chef.getSalary() * 0.85f);
         }
 
         chef.setDemoted(chef.getDemotionCount() > 0);
@@ -1442,7 +1650,7 @@ public class RestaurantApp extends JFrame {
 
         while (d.getDemotionCount() < targetDemotions) {
             d.incrementDemotionCount();
-            d.setSalary(d.getSalary() * 0.85);
+            d.setSalary(d.getSalary() * 0.85f);
         }
 
         d.setDemoted(d.getDemotionCount() > 0);
@@ -1475,7 +1683,7 @@ public class RestaurantApp extends JFrame {
 
         while (chef.getBonusCount() < targetBonus) {
             chef.incrementBonus();
-            chef.setSalary(chef.getSalary() * 1.15);
+            chef.setSalary(chef.getSalary() * 1.15f);
         }
 
         updateChefStatusModel();
@@ -1504,7 +1712,7 @@ public class RestaurantApp extends JFrame {
 
         while (d.getBonusCount() < targetBonus) {
             d.incrementBonusCount();
-            d.setSalary(d.getSalary() * 1.15);
+            d.setSalary(d.getSalary() * 1.15f);
         }
 
         updateDeliveryStatusModel();
@@ -1633,7 +1841,7 @@ public class RestaurantApp extends JFrame {
             return;
         }
 
-        String type = (String) feedbackTypeCombo.getSelectedItem();
+        String type = (String)feedbackTypeCombo.getSelectedItem();
         if (type == null || "None".equals(type)) {
             JOptionPane.showMessageDialog(this, "Please choose Complaint or Compliment.");
             return;
@@ -1912,8 +2120,8 @@ public class RestaurantApp extends JFrame {
         return respText;
     }
 
-    private double calculateCartTotal() {
-        double total = 0.0;
+    private float calculateCartTotal() {
+        float total = 0.00f;
         for (int i = 0; i < cartModel.size(); i++) {
             total += cartModel.getElementAt(i).getPrice();
         }
@@ -1921,7 +2129,7 @@ public class RestaurantApp extends JFrame {
     }
 
     private void updateCartTotal() {
-        double total = calculateCartTotal();
+        float total = calculateCartTotal();
         cartTotalLabel.setText(String.format("Total: $%.2f", total));
     }
 
@@ -2004,7 +2212,7 @@ public class RestaurantApp extends JFrame {
 
     private List<MenuItem> getTopGlobalHighestRated(int limit) {
         List<MenuItem> items = new ArrayList<>(menuItems);
-        items.sort((a, b) -> Double.compare(b.getAverageRating(), a.getAverageRating()));
+        items.sort((a, b) -> Float.compare(b.getAverageRating(), a.getAverageRating()));
 
         List<MenuItem> result = new ArrayList<>();
         for (MenuItem item : items) {
@@ -2037,9 +2245,9 @@ public class RestaurantApp extends JFrame {
     private List<MenuItem> getTopHighestRatedForCustomer(Customer c, int limit) {
         List<MenuItem> items = new ArrayList<>(menuItems);
         items.sort((a, b) -> {
-            double ra = c.getDishAverageRating(a.getName());
-            double rb = c.getDishAverageRating(b.getName());
-            return Double.compare(rb, ra);
+            float ra = c.getDishAverageRating(a.getName());
+            float rb = c.getDishAverageRating(b.getName());
+            return Float.compare(rb, ra);
         });
 
         List<MenuItem> result = new ArrayList<>();
@@ -2101,8 +2309,10 @@ public class RestaurantApp extends JFrame {
 }
 
 class MenuItem {
+	private final int id;
+	
     private String name;
-    private double price;
+    private float price;
     private String chefName;
     private boolean vipOnly;
 
@@ -2110,11 +2320,12 @@ class MenuItem {
     private int ratingCount;
     private int totalRating;
 
-    public MenuItem(String name, double price, String chefName) {
+    public MenuItem(String name, float price, String chefName) {
         this(name, price, chefName, false);
     }
 
-    public MenuItem(String name, double price, String chefName, boolean vipOnly) {
+    public MenuItem(String name, float price, String chefName, boolean vipOnly) {
+    	id = 0;
         this.name = name;
         this.price = price;
         this.chefName = chefName;
@@ -2123,12 +2334,43 @@ class MenuItem {
         this.ratingCount = 0;
         this.totalRating = 0;
     }
+    
+    public MenuItem(Connection connection, ResultSet result) throws SQLException {
+    	/*
+		CREATE TABLE IF NOT EXISTS MenuItems (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+		    name VARCHAR(256) NOT NULL,
+		    price FLOAT NOT NULL DEFAULT 0,
+		    vip BOOLEAN NOT NULL DEFAULT FALSE,
+		    orders INT NOT NULL DEFAULT 0,
+		    chef_id INT NOT NULL,
+		    FOREIGN KEY (chef_id) REFERENCES Chefs(id) ON DELETE CASCADE
+		);
+    	 */
+    	id = result.getInt(1);
+    	name = result.getString(2);
+    	price = result.getFloat(3);
+    	vipOnly = result.getBoolean(4);
+    	orderCount = result.getInt(5);
+    	
+    	Statement ratingsStatement = connection.createStatement();
+		ResultSet ratingsResult = ratingsStatement.executeQuery("SELECT rating FROM MenuRatings WHERE menu_id = " + id);
+		while (ratingsResult.next()) {
+			totalRating += ratingsResult.getInt(1);
+			ratingCount += 1;
+		}
+		
+		int chefId = result.getInt(6);
+		Statement cStatement = connection.createStatement();
+		ResultSet cResult = cStatement.executeQuery("SELECT fullname FROM Chefs WHERE chef_id = " + chefId);
+		chefName = cResult.getString(1);
+    }
 
     public String getName() {
         return name;
     }
 
-    public double getPrice() {
+    public float getPrice() {
         return price;
     }
 
@@ -2155,11 +2397,11 @@ class MenuItem {
         }
     }
 
-    public double getAverageRating() {
+    public float getAverageRating() {
         if (ratingCount == 0) {
-            return 0.0;
+            return 0.00f;
         }
-        return (double) totalRating / ratingCount;
+        return (float) totalRating / ratingCount;
     }
 
     public String toString() {
@@ -2169,10 +2411,12 @@ class MenuItem {
 }
 
 class Chef {
+	private final int id;
+	
     private String name;
     private String username;
     private String password;
-    private double salary = 3000.00;
+    private float salary = 3000.00f;
 
     private int warningCount;
     private boolean fired;
@@ -2191,24 +2435,79 @@ class Chef {
     private int highRatingCount;
 
     public Chef(String name, String username, String password) {
+    	id = 0;
         this.name = name;
         this.username = username;
         this.password = password;
     }
+    
+    public Chef(Connection connection, ResultSet result) throws SQLException {
+    	/*
+    	CREATE TABLE IF NOT EXISTS Chefs (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+		    fullname VARCHAR(256) NOT NULL,
+		    username VARCHAR(256) NOT NULL,
+		    password VARCHAR(256) NOT NULL,
+		    fired BOOLEAN NOT NULL DEFAULT FALSE,
+		    salary DOUBLE NOT NULL DEFAULT 0,
+		    warnings INT NOT NULL DEFAULT 0,
+		    bonuses INT NOT NULL DEFAULT 0,
+		    demotions INT NOT NULL DEFAULT 0
+		);
+		 */
+		id = result.getInt(1);
+		name = result.getString(2);
+		username = result.getString(3);
+		password = result.getString(4);
+		fired = result.getBoolean(5);
+		salary = result.getFloat(6);
+		warningCount = result.getInt(7);
+		bonusCount = result.getInt(8);
+		demotionCount = result.getInt(9);
+		
+		ratingCount = 0;
+		complaintCount = 0;
+		complimentCount = 0;
+		
+		totalRating = 0;
+		lastComplaint = "";
+		lastCompliment = "";
+		
+		Statement ratingsStatement = connection.createStatement();
+		ResultSet ratingsResult = ratingsStatement.executeQuery("SELECT rating FROM DelivererRatings WHERE deliverer_id = " + id);
+		while (ratingsResult.next()) {
+			totalRating += ratingsResult.getInt(1);
+			ratingCount += 1;
+		}
+		
+		Statement complaintStatement = connection.createStatement();
+		ResultSet complaintResult = complaintStatement.executeQuery("SELECT message, weight FROM DelivererComplaints WHERE deliverer_id = " + id + " ORDER BY created_at");
+		while (complaintResult.next()) {
+			lastComplaint = complaintResult.getString(1);
+			complaintCount += complaintResult.getInt(2);
+		}
+		
+		Statement complimentStatement = connection.createStatement();
+		ResultSet complimentResult = complimentStatement.executeQuery("SELECT message, weight FROM DelivererCompliments WHERE deliverer_id = " + id + " ORDER BY created_at");
+		while (complimentResult.next()) {
+			lastCompliment = complimentResult.getString(1);
+			complimentCount += complimentResult.getInt(2);
+		}
+	}
 
     public void decideMenu(java.util.List<MenuItem> menuItems) {
         if (name.equals("Chef 1")) {
-            menuItems.add(new MenuItem("Burger", 9.99, name));
-            menuItems.add(new MenuItem("Fries", 3.99, name));
-            menuItems.add(new MenuItem("Chef1 Special", 15.99, name, true));
+            menuItems.add(new MenuItem("Burger", 9.99f, name));
+            menuItems.add(new MenuItem("Fries", 3.99f, name));
+            menuItems.add(new MenuItem("Chef1 Special", 15.99f, name, true));
         } else if (name.equals("Chef 2")) {
-            menuItems.add(new MenuItem("Sushi", 12.99, name));
-            menuItems.add(new MenuItem("Ramen", 10.49, name));
-            menuItems.add(new MenuItem("Chef2 Special", 18.49, name, true));
+            menuItems.add(new MenuItem("Sushi", 12.99f, name));
+            menuItems.add(new MenuItem("Ramen", 10.49f, name));
+            menuItems.add(new MenuItem("Chef2 Special", 18.49f, name, true));
         } else if (name.equals("Chef 3")) {
-            menuItems.add(new MenuItem("Pasta", 11.99, name));
-            menuItems.add(new MenuItem("Salad", 7.49, name));
-            menuItems.add(new MenuItem("Chef3 Special", 16.99, name, true));
+            menuItems.add(new MenuItem("Pasta", 11.99f, name));
+            menuItems.add(new MenuItem("Salad", 7.49f, name));
+            menuItems.add(new MenuItem("Chef3 Special", 16.99f, name, true));
         }
     }
 
@@ -2224,11 +2523,11 @@ class Chef {
         return password;
     }
 
-    public double getSalary() {
+    public float getSalary() {
         return salary;
     }
 
-    public void setSalary(double salary) {
+    public void setSalary(float salary) {
         this.salary = salary;
     }
 
@@ -2269,11 +2568,11 @@ class Chef {
         ratingCount++;
     }
 
-    public double getAverageRating() {
+    public float getAverageRating() {
         if (ratingCount == 0) {
-            return 0.0;
+            return 0.00f;
         }
-        return (double) totalRating / ratingCount;
+        return (float) totalRating / ratingCount;
     }
 
     public int getComplaintCount() {
@@ -2338,10 +2637,12 @@ class Chef {
 }
 
 class DeliveryPerson {
+	private final int id;
+	
     private String name;
     private String username;
     private String password;
-    private double salary = 1500.00;
+    private float salary = 1500.00f;
 
     private int warningCount;
     private boolean fired;
@@ -2359,17 +2660,73 @@ class DeliveryPerson {
     private int bonusCount;
     private int highRatingCount;
 
-    private double lastBidPrice;
+    private float lastBidPrice;
     private String lastJustificationMemo;
 
     public DeliveryPerson(String name) {
+    	id = 0;
         this.name = name;
     }
 
     public DeliveryPerson(String name, String username, String password) {
+    	id = 0;
         this.name = name;
         this.username = username;
         this.password = password;
+    }
+    
+    public DeliveryPerson(Connection connection, ResultSet result) throws SQLException {
+    	/*
+		CREATE TABLE IF NOT EXISTS Deliverers (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+		    fullname VARCHAR(256) NOT NULL,
+		    username VARCHAR(256) NOT NULL,
+		    password VARCHAR(256) NOT NULL,
+		    fired BOOLEAN NOT NULL DEFAULT FALSE,
+		    salary DOUBLE NOT NULL DEFAULT 0,
+		    warnings INT NOT NULL DEFAULT 0,
+		    bonuses INT NOT NULL DEFAULT 0,
+		    demotions INT NOT NULL DEFAULT 0
+		);
+		 */
+		id = result.getInt(1);
+		name = result.getString(2);
+		username = result.getString(3);
+		password = result.getString(4);
+		fired = result.getBoolean(5);
+		salary = result.getFloat(6);
+		warningCount = result.getInt(7);
+		bonusCount = result.getInt(8);
+		demotionCount = result.getInt(9);
+		
+		ratingCount = 0;
+		complaintCount = 0;
+		complimentCount = 0;
+		
+		totalRating = 0;
+		lastComplaint = "";
+		lastCompliment = "";
+		
+		Statement ratingsStatement = connection.createStatement();
+		ResultSet ratingsResult = ratingsStatement.executeQuery("SELECT rating FROM DelivererRatings WHERE deliverer_id = " + id);
+		while (ratingsResult.next()) {
+			totalRating += ratingsResult.getInt(1);
+			ratingCount += 1;
+		}
+		
+		Statement complaintStatement = connection.createStatement();
+		ResultSet complaintResult = complaintStatement.executeQuery("SELECT message, weight FROM DelivererComplaints WHERE deliverer_id = " + id + " ORDER BY created_at");
+		while (complaintResult.next()) {
+			lastComplaint = complaintResult.getString(1);
+			complaintCount += complaintResult.getInt(2);
+		}
+		
+		Statement complimentStatement = connection.createStatement();
+		ResultSet complimentResult = complimentStatement.executeQuery("SELECT message, weight FROM DelivererCompliments WHERE deliverer_id = " + id + " ORDER BY created_at");
+		while (complimentResult.next()) {
+			lastCompliment = complimentResult.getString(1);
+			complimentCount += complimentResult.getInt(2);
+		}
     }
 
     public String getName() {
@@ -2384,11 +2741,11 @@ class DeliveryPerson {
         return password;
     }
 
-    public double getSalary() {
+    public float getSalary() {
         return salary;
     }
 
-    public void setSalary(double salary) {
+    public void setSalary(float salary) {
         this.salary = salary;
     }
 
@@ -2421,11 +2778,11 @@ class DeliveryPerson {
         ratingCount++;
     }
 
-    public double getAverageRating() {
+    public float getAverageRating() {
         if (ratingCount == 0) {
-            return 0.0;
+            return 0.00f;
         }
-        return (double) totalRating / ratingCount;
+        return (float) totalRating / ratingCount;
     }
 
     public int getComplaintCount() {
@@ -2484,11 +2841,11 @@ class DeliveryPerson {
         bonusCount++;
     }
 
-    public double getLastBidPrice() {
+    public float getLastBidPrice() {
         return lastBidPrice;
     }
 
-    public void setLastBidPrice(double lastBidPrice) {
+    public void setLastBidPrice(float lastBidPrice) {
         this.lastBidPrice = lastBidPrice;
     }
 
@@ -2517,10 +2874,11 @@ class DeliveryPerson {
 }
 
 class Customer {
+	private final int id;
     private String username;
     private String password;
     private boolean vip;
-    private double totalSpent;
+    private float totalSpent;
     private int orderCount;
     private int ordersSinceLastFreeDelivery;
     private int freeDeliveryCredits;
@@ -2550,20 +2908,63 @@ class Customer {
         return dishOrderCounts.getOrDefault(key, 0);
     }
 
-    public double getDishAverageRating(String itemName) {
+    public float getDishAverageRating(String itemName) {
         String key = itemName.toLowerCase();
         int count = dishRatingCounts.getOrDefault(key, 0);
         if (count == 0) {
-            return 0.0;
+            return 0.00f;
         }
         int total = dishRatingTotals.getOrDefault(key, 0);
-        return (double) total / count;
+        return (float) total / count;
     }
 
     public Customer(String username, String password) {
+    	id = 0;
         this.username = username;
         this.password = password;
         this.vip = false;
+    }
+    
+    public Customer(Connection connection, ResultSet result) throws SQLException {
+    	/*
+		CREATE TABLE IF NOT EXISTS Customers (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+		    username VARCHAR(256) NOT NULL,
+		    password VARCHAR(256) NOT NULL,
+		    vip BOOLEAN NOT NULL DEFAULT FALSE,
+		    total_spent FLOAT NOT NULL DEFAULT 0,
+		    orders INT NOT NULL DEFAULT 0,
+		    orders_since_last_free_delivery INT NOT NULL DEFAULT 0,
+		    free_delivery_credits INT NOT NULL DEFAULT 0,
+		    warnings INT NOT NULL DEFAULT 0,
+		    banned BOOLEAN NOT NULL DEFAULT FALSE
+		);
+		 */
+		id = result.getInt(1);
+		username = result.getString(2);
+		password = result.getString(3);
+		vip = result.getBoolean(4);
+		totalSpent = result.getFloat(5);
+		orderCount = result.getInt(6);
+		ordersSinceLastFreeDelivery = result.getInt(7);
+		freeDeliveryCredits = result.getInt(8);
+		warningCount = result.getInt(9);
+		deregistered = result.getBoolean(10);
+		
+		complaintCount = 0;
+		complimentCount = 0;
+		
+		Statement complaintStatement = connection.createStatement();
+		ResultSet complaintResult = complaintStatement.executeQuery("SELECT * FROM DelivererComplaints WHERE customer_id = " + id + " ORDER BY created_at");
+		while (complaintResult.next()) {
+			complaintCount += 1;
+		}
+
+		Statement complimentStatement = connection.createStatement();
+		ResultSet complimentResult = complimentStatement.executeQuery("SELECT * FROM DelivererCompliments WHERE deliverer_id = " + id + " ORDER BY created_at");
+		while (complimentResult.next()) {
+			complimentCount += 1;
+		}
     }
 
     public String getUsername() {
@@ -2602,7 +3003,7 @@ class Customer {
         this.deregistered = deregistered;
     }
 
-    public double getTotalSpent() {
+    public float getTotalSpent() {
         return totalSpent;
     }
 
@@ -2610,7 +3011,7 @@ class Customer {
         return orderCount;
     }
 
-    public void recordOrder(double amount) {
+    public void recordOrder(float amount) {
         orderCount++;
         totalSpent += amount;
         ordersSinceLastFreeDelivery++;
@@ -2664,23 +3065,28 @@ class Customer {
 }
 
 class Order {
-    private int id;
+    private final int id;
     private Customer customer;
     private Chef chef;
-    private double amountToPay;
+    private float amountToPay;
 
     private DeliveryPerson assignedDelivery;
-    private double bestBid = Double.MAX_VALUE;
-    private Map<DeliveryPerson, Double> bids = new HashMap<>();
+    private float bestBid = Float.MAX_VALUE;
+    private Map<DeliveryPerson, Float> bids = new HashMap<>();
 
     private List<MenuItem> items;
 
-    public Order(int id, Customer customer, Chef chef, double amountToPay, List<MenuItem> items) {
+    public Order(int id, Customer customer, Chef chef, float amountToPay, List<MenuItem> items) {
         this.id = id;
         this.customer = customer;
         this.chef = chef;
         this.amountToPay = amountToPay;
         this.items = new ArrayList<>(items);
+    }
+    
+    public Order(Connection connection, ResultSet result) throws SQLException {
+    	id = result.getInt(1);
+    	amountToPay = result.getFloat(2);
     }
 
     public int getId() {
@@ -2695,7 +3101,7 @@ class Order {
         return chef;
     }
 
-    public double getAmountToPay() {
+    public float getAmountToPay() {
         return amountToPay;
     }
 
@@ -2703,8 +3109,8 @@ class Order {
         return assignedDelivery;
     }
 
-    public double getBestBid() {
-        if (bestBid == Double.MAX_VALUE) return 0.0;
+    public float getBestBid() {
+        if (bestBid == Float.MAX_VALUE) return 0.0f;
         return bestBid;
     }
 
@@ -2712,7 +3118,7 @@ class Order {
         return items;
     }
 
-    public boolean placeBid(DeliveryPerson d, double price) {
+    public boolean placeBid(DeliveryPerson d, float price) {
         bids.put(d, price);
         boolean isNewBest = false;
         if (price < bestBid) {
@@ -2723,13 +3129,13 @@ class Order {
         return isNewBest;
     }
 
-    public Map<DeliveryPerson, Double> getBids() {
+    public Map<DeliveryPerson, Float> getBids() {
         return new HashMap<>(bids);
     }
 
     public void assignDelivery(DeliveryPerson d) {
         this.assignedDelivery = d;
-        Double price = bids.get(d);
+        Float price = bids.get(d);
         if (price != null) {
             bestBid = price;
         }
@@ -2740,7 +3146,7 @@ class Order {
         String chefName = chef != null ? chef.getName() : "N/A";
         String status;
         if (assignedDelivery == null) {
-            if (bestBid == Double.MAX_VALUE) {
+            if (bestBid == Float.MAX_VALUE) {
                 status = "Waiting bids";
             } else {
                 status = "Best bid $" + String.format("%.2f", bestBid);
@@ -2756,6 +3162,8 @@ class Order {
 class CustomerFeedback {
     private Customer customer;
     private DeliveryPerson delivery;
+    private Chef chef;
+    private boolean isChef;
     private String type;
     private String text;
     private boolean disputed;
@@ -2766,6 +3174,16 @@ class CustomerFeedback {
         this.type = type;
         this.text = text;
         this.disputed = disputed;
+        isChef = false;
+    }
+    
+    public CustomerFeedback(Customer customer, Chef chef, String type, String text, boolean disputed) {
+    	this.customer = customer;
+        this.chef = chef;
+        this.type = type;
+        this.text = text;
+        this.disputed = disputed;
+        isChef = true;
     }
 
     public Customer getCustomer() {
@@ -2774,6 +3192,14 @@ class CustomerFeedback {
 
     public DeliveryPerson getDelivery() {
         return delivery;
+    }
+
+    public Chef getChef() {
+        return chef;
+    }
+    
+    public boolean isChef() {
+    	return isChef;
     }
 
     public String getType() {
@@ -2792,7 +3218,7 @@ class CustomerFeedback {
         String cust = customer != null ? customer.getUsername() : "UnknownCustomer";
         String del = delivery != null ? delivery.getName() : "UnknownDelivery";
         String disp = disputed ? "Yes" : "No";
-        return "Cust:" + cust + " | From:" + del + " | " + type + " | Disputed:" + disp + " | " + text;
+        return "From Cust.: " + cust + " | To Del.: " + del + " | " + type + " | Disputed: " + disp + " | " + text;
     }
 }
 
